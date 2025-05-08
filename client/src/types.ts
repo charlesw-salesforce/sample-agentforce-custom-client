@@ -19,9 +19,24 @@ export interface Participant {
   clientIdentifier: string;
 }
 
-export type Theme = "dark" | "light";
+export type Theme = "light" | "dark";
 
-interface ThemeStyles {
+// Define the structure for message bubble styles
+export interface MessageBubbleStyles {
+  styles: string; // Base classes for the bubble
+  link?: string;
+  linkHover?: string;
+  codeBg?: string;
+  codeText?: string;
+  preBg?: string;
+  preText?: string;
+}
+
+export interface AiSystemMessageBubbleStyles extends MessageBubbleStyles {
+  bg: string;
+}
+
+export interface ThemeStyles {
   primary: string;
   primaryHover: string;
   primaryText: string;
@@ -30,14 +45,28 @@ interface ThemeStyles {
   secondaryText: string;
   border: string;
   inputBg: string;
+  inputText: string;
+  containerBg: string;
+  containerBorder: string;
+  iconColor: string;
+  iconColorMuted: string;
+  buttonDisabledBg: string;
+  buttonDisabledText: string;
+  messageMetaText: string;
+  loadingDotColor: string;
+  fontSizes: {
+    caption: string;
+    bodySmall: string;
+    body: string;
+    heading: string;
+    title: string;
+  };
   messageBubble: {
-    user: string;
-    ai: string;
-    system: string;
+    user: MessageBubbleStyles;
+    ai: AiSystemMessageBubbleStyles;
+    system: AiSystemMessageBubbleStyles;
   };
 }
 
-export interface ThemeConfig {
-  dark: ThemeStyles;
-  light: ThemeStyles;
-}
+// Define the main ThemeConfig type
+export type ThemeConfig = Record<Theme, ThemeStyles>;

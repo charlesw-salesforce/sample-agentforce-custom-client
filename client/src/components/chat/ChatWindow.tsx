@@ -1,123 +1,65 @@
-import React, { useState, useRef, useEffect } from "react";
-import {
-  AnimatedChatContainer,
-  ChatInput,
-  ChatHeader,
-  ChatMessageList,
-  ChatMinimized,
-} from "./index";
-import { useChat } from "../../hooks";
-import { useViewport } from "../../hooks/useViewport";
+import React, { useRef, useEffect } from "react";
+import { ChatInput, ChatHeader, ChatMessage, LoadingContainer } from "./index";
+import { useChat, useTheme, themeConfig } from "../../hooks";
+import { Message } from "../../types";
 
 interface ChatWindowProps {
   onClose: () => void;
   agentRole: string;
 }
 
-type WindowState = "MAXIMIZED" | "MINIMIZED";
-
 export const ChatWindow: React.FC<ChatWindowProps> = ({
   onClose,
   agentRole,
 }) => {
-  const [windowState, setWindowState] = useState<WindowState>("MAXIMIZED");
-  const [inputValue, setInputValue] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const { isMobile } = useViewport();
-
   const {
     messages,
     isConnected,
     isLoading,
     isTyping,
-    error,
     currentAgent,
+    error,
     sendMessage,
-    closeChat,
     startNewChat,
   } = useChat();
 
+  const { theme } = useTheme();
+  const styles = themeConfig[theme];
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (windowState === "MAXIMIZED" && messagesEndRef.current) {
-      const behavior = messages.length <= 1 ? "auto" : "smooth";
-      messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
-    }
-  }, [messages, windowState]);
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  // Send messages
-  const handleSend = async () => {
-    if (!inputValue.trim() || !isConnected) return;
-    const messageText = inputValue;
-    setInputValue("");
-
-    try {
-      await sendMessage(messageText);
-    } catch (error) {
-      console.error("Failed to send message:", error);
-      setInputValue(messageText);
-    }
-  };
-
-  // Handle window state
-  const handleMinimize = () => {
-    setWindowState("MINIMIZED");
-  };
-
-  const handleMaximize = () => {
-    setWindowState("MAXIMIZED");
-  };
-
-  const handleClose = async () => {
-    try {
-      setWindowState("MINIMIZED");
-      await closeChat(onClose);
-    } catch (error) {
-      console.error("Error closing chat:", error);
-      onClose();
-    }
-  };
+  const isEffectivelyLoading = isLoading || isTyping;
 
   return (
-    <>
-      {windowState === "MINIMIZED" && (
-        <div className="fixed right-4 bottom-4 z-50">
-          <ChatMinimized onMaximize={handleMaximize} />
-        </div>
-      )}
-      <AnimatedChatContainer
-        isOpen={windowState === "MAXIMIZED"}
-        isMobile={isMobile}
-      >
-        <ChatHeader
-          agentName={currentAgent}
-          agentRole={agentRole}
-          onMinimize={handleMinimize}
-          onClose={handleClose}
-          isConnected={isConnected}
-          onStartNewChat={startNewChat}
-        />
+    <div className={`h-full w-full flex flex-col ${styles.containerBg}`}>
+      <ChatHeader
+        agentName={currentAgent}
+        agentRole={agentRole}
+        onClose={onClose}
+        isConnected={isConnected}
+        onStartNewChat={startNewChat}
+      />
 
-        <ChatMessageList
-          messages={messages}
-          isLoading={isLoading || isTyping}
-          error={!!error}
-          messagesEndRef={messagesEndRef}
-        />
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
+        {error && (
+          <div className="bg-red-50 text-red-800 p-3 text-sm">
+            Failed to load messages. Please try again.
+          </div>
+        )}
+        <>
+          {messages.map((message: Message) => (
+            <ChatMessage key={message.id} {...message} />
+          ))}
+          {isEffectivelyLoading && <LoadingContainer align="left" />}
+          <div ref={messagesEndRef} />
+        </>
+      </div>
 
-        <ChatInput
-          value={inputValue}
-          onChange={setInputValue}
-          onSend={handleSend}
-          onKeyPress={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          isEnabled={isConnected}
-        />
-      </AnimatedChatContainer>
-    </>
+      <ChatInput onSend={sendMessage} isEnabled={isConnected} />
+    </div>
   );
 };

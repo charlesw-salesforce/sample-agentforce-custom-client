@@ -1,48 +1,49 @@
-import React from "react";
+import React, { useState } from "react";
 import { Send, Mic } from "lucide-react";
 import { useSpeechRecognition, useTheme, themeConfig } from "../../hooks";
 
 interface ChatInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  onSend: () => void;
-  onKeyPress: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onSend: (message: string) => Promise<void>;
   isEnabled: boolean;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({
-  value,
-  onChange,
-  onSend,
-  onKeyPress,
-  isEnabled,
-}) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSend, isEnabled }) => {
+  const [inputValue, setInputValue] = useState("");
   const { theme } = useTheme();
   const styles = themeConfig[theme];
 
   const { isListening, isSupported, toggleListening } = useSpeechRecognition({
-    onTranscript: onChange,
-    onFinalTranscript: () => {
-      if (value.trim()) {
-        onSend();
+    onTranscript: setInputValue,
+    onFinalTranscript: async () => {
+      if (inputValue.trim()) {
+        await handleSend();
       }
     },
   });
 
+  const handleSend = async () => {
+    if (!inputValue.trim() || !isEnabled) return;
+    await onSend(inputValue);
+    setInputValue("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   return (
-    <div className="border-t p-2 sm:p-3">
+    <div className={`border-t ${styles.containerBorder} p-2 sm:p-3`}>
       <div className="flex flex-col sm:flex-row items-stretch sm:items-end space-y-2 sm:space-y-0 sm:space-x-3">
         <div
-          className={`
-          flex-1 ${styles.inputBg} rounded-lg border border-transparent 
-          transition-all duration-200 
-          ${isEnabled ? "hover:border-gray-200" : "opacity-50"}
-        `}
+          className={`flex-1 ${styles.inputBg} rounded-lg border ${styles.border} border-opacity-0 transition-all duration-200 ${isEnabled ? `hover:border-opacity-100` : "opacity-50"}`}
         >
           <textarea
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={onKeyPress}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder={
               isEnabled
                 ? isListening
@@ -50,7 +51,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   : "Type your message..."
                 : "Connecting..."
             }
-            className="w-full p-3 bg-transparent resize-none focus:outline-none text-sm"
+            className={`w-full p-3 bg-transparent resize-none focus:outline-none ${styles.fontSizes.bodySmall} ${styles.inputText}`}
             rows={1}
             style={{ minHeight: "44px", maxHeight: "200px" }}
             disabled={!isEnabled}
@@ -61,27 +62,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <button
                 onClick={toggleListening}
                 disabled={!isEnabled || !isSupported}
-                className={`relative p-1 hover:bg-gray-200 rounded-full transition-all duration-300`}
+                className={`relative p-1 ${styles.secondaryHover} rounded-full transition-all duration-300`}
                 aria-label="Toggle speech recognition"
               >
                 {isListening && (
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-50"></span>
-                    <span className="relative inline-flex rounded-full h-full w-full bg-red-50"></span>
-                  </span>
+                  <div className="absolute inset-0 animate-ping rounded-full bg-red-400 opacity-50" />
                 )}
                 <Mic
-                  className={`relative w-4 h-4 ${isListening ? "text-red-500" : "text-gray-500"}`}
+                  className={`relative w-4 h-4 ${isListening ? "text-red-500" : styles.iconColor}`}
                 />
               </button>
             </div>
             <button
-              onClick={onSend}
-              disabled={!value.trim() || !isEnabled}
+              onClick={handleSend}
+              disabled={!inputValue.trim() || !isEnabled}
               className={`p-3 rounded-full transition-colors duration-200 ${
-                value.trim() && isEnabled
+                inputValue.trim() && isEnabled
                   ? `${styles.primary} ${styles.primaryText} ${styles.primaryHover}`
-                  : "bg-gray-100 text-gray-400"
+                  : `${styles.buttonDisabledBg} ${styles.buttonDisabledText}`
               }`}
               aria-label="Send message"
             >

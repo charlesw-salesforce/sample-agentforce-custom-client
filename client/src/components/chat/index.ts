@@ -1,9 +1,7 @@
-export * from "./AnimatedChatContainer";
 export * from "./ChatWindow";
 export * from "./ChatInput";
 export * from "./ChatHeader";
 export * from "./ChatMessage";
-export * from "./ChatMessageList";
-export * from "./ChatMinimized";
+// export * from "./ChatMessageList"; // Removed
 export * from "./ChatErrorBoundary";
 export * from "./LoadingContainer";

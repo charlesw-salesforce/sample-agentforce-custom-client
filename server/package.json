@@ -2,6 +2,7 @@
   "name": "server",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -25,11 +26,12 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "@fastify/cors": "^10.0.1",
+    "@fastify/cors": "^10.1.0",
     "@fastify/static": "^8.0.3",
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.0",
+    "miaw-api-client": "^0.9.0",
     "uuid": "^11.0.3"
   }
 }

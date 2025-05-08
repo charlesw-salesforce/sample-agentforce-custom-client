@@ -17,18 +17,12 @@
     "dev:client": "cd client && pnpm dev",
     "dev:server": "cd server && pnpm dev",
     "dev": "pnpm dev:server & pnpm dev:client",
-    "build:client": "tsc && cd client && pnpm build && cp -r dist ../server/",
+    "build:client": "tsc && cd client && pnpm build && mkdir -p ../server/dist/public && cp -r dist/* ../server/dist/public/",
     "build:server": "cd server && tsc",
-    "build": "pnpm build:client & pnpm build:server",
+    "build": "pnpm build:client && pnpm build:server",
     "start": "cd server && node dist/index.js"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "prettier": "^3.4.2"
-  },
-  "dependencies": {
-    "typescript": "^5.7.2"
-  }
+  "license": "ISC"
 }

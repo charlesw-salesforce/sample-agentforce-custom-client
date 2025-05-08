@@ -10,36 +10,28 @@ interface MessagingCredentials {
 
 interface MessagingHookReturn {
   initialize: () => Promise<MessagingCredentials>;
-  sendMessage: (
-    token: string,
-    conversationId: string,
-    content: string
-  ) => Promise<void>;
-  closeChat: (token: string, conversationId: string) => Promise<void>;
-  setupEventSource: (token: string) => EventSource;
+  sendMessage: (conversationId: string, content: string) => Promise<void>;
+  closeChat: (conversationId: string) => Promise<void>;
+  setupEventSource: (conversationId: string) => EventSource;
 }
 
 export function useSalesforceMessaging(): MessagingHookReturn {
   const initialize = useCallback(async (): Promise<MessagingCredentials> => {
-    const response = await fetch(`${API_BASE_URL}/chat/initialize`);
+    const response = await fetch(`${API_BASE_URL}/chat/init`, {
+      method: "POST",
+    });
     if (!response.ok) throw new Error("Failed to initialize chat");
     return response.json();
   }, []);
 
   const sendMessage = useCallback(
-    async (
-      token: string,
-      conversationId: string,
-      content: string
-    ): Promise<void> => {
-      const response = await fetch(`${API_BASE_URL}/chat/message`, {
+    async (conversationId: string, content: string): Promise<void> => {
+      const response = await fetch(`${API_BASE_URL}/chat/send`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          "X-Conversation-Id": conversationId,
         },
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify({ conversationId, text: content }),
       });
 
       if (!response.ok) throw new Error("Failed to send message");
@@ -48,13 +40,13 @@ export function useSalesforceMessaging(): MessagingHookReturn {
   );
 
   const closeChat = useCallback(
-    async (token: string, conversationId: string): Promise<void> => {
-      const response = await fetch(`${API_BASE_URL}/chat/end`, {
+    async (conversationId: string): Promise<void> => {
+      const response = await fetch(`${API_BASE_URL}/chat/close`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Conversation-Id": conversationId,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({ conversationId }),
       });
 
       if (!response.ok) throw new Error("Failed to close chat");
@@ -62,11 +54,14 @@ export function useSalesforceMessaging(): MessagingHookReturn {
     []
   );
 
-  const setupEventSource = useCallback((token: string): EventSource => {
-    return new EventSource(`${API_BASE_URL}/chat/sse?token=${token}`, {
-      withCredentials: true,
-    });
-  }, []);
+  const setupEventSource = useCallback(
+    (conversationId: string): EventSource => {
+      return new EventSource(`${API_BASE_URL}/chat/events/${conversationId}`, {
+        withCredentials: true,
+      });
+    },
+    []
+  );
 
   return {
     initialize,

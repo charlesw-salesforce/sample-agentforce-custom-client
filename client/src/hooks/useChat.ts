@@ -13,10 +13,7 @@ export function useChat() {
   const [error, setError] = useState<string | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
-  const credsRef = useRef<{
-    accessToken: string;
-    conversationId: string;
-  } | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isInitializedRef = useRef(false);
 
@@ -31,13 +28,10 @@ export function useChat() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
     timeoutRef.current = setTimeout(async () => {
-      if (!credsRef.current || !isConnected) return;
+      if (!conversationIdRef.current || !isConnected) return;
 
       try {
-        await closeChatApi(
-          credsRef.current.accessToken,
-          credsRef.current.conversationId
-        );
+        await closeChatApi(conversationIdRef.current);
         setIsConnected(false);
         setMessages((prev) => [
           ...prev,
@@ -57,21 +51,26 @@ export function useChat() {
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       try {
-        const data = JSON.parse(event.data);
-        const sender = data.conversationEntry.sender.role.toLowerCase();
-        if (sender === "chatbot") {
+        const { data: eventData } = JSON.parse(event.data);
+        const data = JSON.parse(eventData);
+        if (data.conversationEntry.entryType === "Message") {
           setIsTyping(false);
           const payload = JSON.parse(data.conversationEntry.entryPayload);
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: payload.abstractMessage.id,
-              type: "ai",
-              content: payload.abstractMessage.staticContent.text,
-              timestamp: new Date(data.conversationEntry.clientTimestamp),
-            },
-          ]);
-          setIsLoading(false);
+          const messageType =
+            data.conversationEntry.sender.role === "EndUser" ? "user" : "ai";
+
+          if (messageType === "ai") {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: payload.abstractMessage.id,
+                type: messageType,
+                content: payload.abstractMessage.staticContent.text,
+                timestamp: new Date(data.conversationEntry.clientTimestamp),
+              },
+            ]);
+            setIsLoading(false);
+          }
           resetTimeout();
         }
       } catch (err) {
@@ -82,64 +81,92 @@ export function useChat() {
   );
 
   const handleParticipantChange = useCallback((event: MessageEvent) => {
-    const data = JSON.parse(event.data);
-    const entries = JSON.parse(data.conversationEntry.entryPayload).entries;
+    try {
+      const { data: eventData } = JSON.parse(event.data);
+      const data = JSON.parse(eventData);
+      if (data.conversationEntry.entryType === "ParticipantChanged") {
+        const entries = JSON.parse(data.conversationEntry.entryPayload).entries;
 
-    entries.forEach((entry: Entry) => {
-      if (
-        entry.operation === "add" &&
-        entry.participant.role.toLowerCase() === "chatbot"
-      ) {
-        setCurrentAgent(entry.displayName);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            type: "system",
-            content: `${entry.displayName} has joined the chat`,
-            timestamp: new Date(),
-          },
-        ]);
+        entries.forEach((entry: Entry) => {
+          if (
+            entry.operation === "add" &&
+            entry.participant.role.toLowerCase() === "chatbot"
+          ) {
+            setCurrentAgent(entry.displayName);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                type: "system",
+                content: `${entry.displayName} has joined the chat`,
+                timestamp: new Date(),
+              },
+            ]);
+          }
+          if (
+            entry.operation === "remove" &&
+            entry.participant.role === "agent"
+          ) {
+            setCurrentAgent(null);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                type: "system",
+                content: `${entry.displayName} has left the chat`,
+                timestamp: new Date(),
+              },
+            ]);
+          }
+        });
       }
-      if (entry.operation === "remove" && entry.participant.role === "agent") {
-        setCurrentAgent(null);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            type: "system",
-            content: `${entry.displayName} has left the chat`,
-            timestamp: new Date(),
-          },
-        ]);
-      }
-    });
+    } catch (err) {
+      console.error("Participant change parse error:", err);
+    }
   }, []);
+
+  const handleIncomingEvent = useCallback(
+    (event: MessageEvent) => {
+      try {
+        const { event: eventType } = JSON.parse(event.data);
+
+        switch (eventType) {
+          case "CONVERSATION_MESSAGE":
+            handleMessage(event);
+            break;
+          case "CONVERSATION_PARTICIPANT_CHANGED":
+            handleParticipantChange(event);
+            break;
+          case "CONVERSATION_TYPING_STARTED_INDICATOR":
+            if (!isLoading) setIsTyping(true);
+            resetTimeout();
+            break;
+          case "CONVERSATION_TYPING_STOPPED_INDICATOR":
+            setIsTyping(false);
+            break;
+        }
+      } catch (err) {
+        console.error("Event parse error:", err);
+      }
+    },
+    [isLoading, resetTimeout, handleMessage, handleParticipantChange]
+  );
 
   const setupEventHandlers = useCallback(
     (events: EventSource) => {
       events.onopen = () => {
         setIsConnected(true);
-        setError(null);
         resetTimeout();
       };
 
-      events.onerror = () => setIsConnected(false);
+      events.onerror = (error) => {
+        console.error("EventSource error:", error);
+        setIsConnected(false);
+      };
 
-      events.addEventListener("CONVERSATION_MESSAGE", handleMessage);
-      events.addEventListener(
-        "CONVERSATION_PARTICIPANT_CHANGED",
-        handleParticipantChange
-      );
-      events.addEventListener("CONVERSATION_TYPING_STARTED_INDICATOR", () => {
-        if (!isLoading) setIsTyping(true);
-        resetTimeout();
-      });
-      events.addEventListener("CONVERSATION_TYPING_STOPPED_INDICATOR", () => {
-        setIsTyping(false);
-      });
+      events.addEventListener("message", handleIncomingEvent);
     },
-    [isLoading, resetTimeout, handleMessage, handleParticipantChange]
+    [resetTimeout, handleIncomingEvent]
   );
 
   const startChat = useCallback(async () => {
@@ -154,10 +181,10 @@ export function useChat() {
       setCurrentAgent(null);
       setError(null);
 
-      const creds = await initialize();
-      credsRef.current = creds;
+      const { conversationId } = await initialize();
+      conversationIdRef.current = conversationId;
 
-      const events = setupEventSource(creds.accessToken);
+      const events = setupEventSource(conversationId);
       eventSourceRef.current = events;
       setupEventHandlers(events);
     } catch (err) {
@@ -168,41 +195,34 @@ export function useChat() {
   }, [initialize, setupEventSource, setupEventHandlers]);
 
   const sendMessage = async (content: string) => {
-    if (!credsRef.current) return;
+    if (!conversationIdRef.current) return;
     resetTimeout();
 
-    const message = {
-      id: crypto.randomUUID(),
-      type: "user" as const,
-      content,
-      timestamp: new Date(),
-    };
-
     try {
-      setMessages((prev) => [...prev, message]);
-      setIsLoading(true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: "user",
+          content,
+          timestamp: new Date(),
+        },
+      ]);
 
-      await sendMessageToApi(
-        credsRef.current.accessToken,
-        credsRef.current.conversationId,
-        content
-      );
+      setIsLoading(true);
+      await sendMessageToApi(conversationIdRef.current, content);
     } catch (err) {
       console.error(err);
       setError("Failed to send message");
       setIsLoading(false);
-      setMessages((prev) => prev.filter((m) => m.id !== message.id));
     }
   };
 
   const closeChat = async (onClosed: () => void) => {
     try {
-      if (!credsRef.current) return;
+      if (!conversationIdRef.current) return;
 
-      await closeChatApi(
-        credsRef.current.accessToken,
-        credsRef.current.conversationId
-      );
+      await closeChatApi(conversationIdRef.current);
 
       setIsConnected(false);
       setIsTyping(false);
@@ -221,40 +241,17 @@ export function useChat() {
     if (isInitializedRef.current) return;
     isInitializedRef.current = true;
 
-    const cleanupEventSource = (eventSource: EventSource) => {
-      eventSource.removeEventListener("CONVERSATION_MESSAGE", handleMessage);
-      eventSource.removeEventListener(
-        "HANDLE_PARTICIPANT_CHANGE",
-        handleParticipantChange
-      );
-      eventSource.removeEventListener(
-        "CONVERSATION_TYPING_STARTED_INDICATOR",
-        () => {
-          if (!isLoading) setIsTyping(true);
-          resetTimeout();
-        }
-      );
-      eventSource.removeEventListener(
-        "CONVERSATION_TYPING_STOPPED_INDICATOR",
-        () => {
-          setIsTyping(false);
-        }
-      );
-
-      eventSource.close();
-    };
     startChat();
+
     return () => {
-      if (eventSourceRef.current) cleanupEventSource(eventSourceRef.current);
+      const eventSource = eventSourceRef.current;
+      if (eventSource) {
+        eventSource.removeEventListener("message", handleIncomingEvent);
+        eventSource.close();
+      }
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [
-    startChat,
-    isLoading,
-    resetTimeout,
-    handleMessage,
-    handleParticipantChange,
-  ]);
+  }, [startChat, handleIncomingEvent]);
 
   return {
     messages,
