@@ -14,13 +14,13 @@
     "node": "20.x.x"
   },
   "scripts": {
-    "dev:client": "cd client && pnpm dev",
-    "dev:server": "cd server && pnpm dev",
-    "dev": "pnpm dev:server & pnpm dev:client",
-    "build:client": "tsc && cd client && pnpm build && mkdir -p ../server/dist/public && cp -r dist/* ../server/dist/public/",
-    "build:server": "cd server && tsc",
-    "build": "pnpm build:client && pnpm build:server",
-    "start": "cd server && node dist/index.js"
+    "dev:client": "pnpm --filter client dev",
+    "dev:server": "pnpm --filter server dev",
+    "dev": "pnpm -r --parallel dev",
+    "build:client": "pnpm --filter client build",
+    "build:server": "pnpm --filter server build",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter server start"
   },
   "keywords": [],
   "author": "",
