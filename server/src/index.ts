@@ -46,6 +46,20 @@ const app = fastify({
 }); // Store active conversations
 const conversations = new Map();
 
+// Add cleanup interval
+const CLEANUP_INTERVAL = 1000 * 60 * 60; // 1 hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, conversation] of conversations.entries()) {
+    if (
+      conversation.lastActivity &&
+      now - conversation.lastActivity > CLEANUP_INTERVAL
+    ) {
+      conversations.delete(id);
+    }
+  }
+}, CLEANUP_INTERVAL);
+
 // Helper function to get a conversation from the in-memory store
 function getConversation(conversationId: string) {
   const conversation = conversations.get(conversationId);
@@ -73,8 +87,11 @@ app.post("/api/chat/init", async () => {
   const { accessToken } = await client.createToken();
   const { id: conversationId } = await client.createConversation(accessToken);
 
-  // Store the token and conversation ID
-  conversations.set(conversationId, { accessToken });
+  // Store the token and conversation ID with timestamp
+  conversations.set(conversationId, {
+    accessToken,
+    lastActivity: Date.now(),
+  });
 
   return { conversationId };
 });
@@ -88,6 +105,9 @@ app.post(
   ) => {
     const { conversationId, text } = request.body;
     const conversation = await getConversation(conversationId);
+
+    // Update last activity
+    conversation.lastActivity = Date.now();
 
     const messageEntry = await client.sendMessage(
       conversation.accessToken,
